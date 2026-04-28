@@ -12,29 +12,30 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "feedparser"])
     import feedparser
 
-# ===== 使用你指定的聚合热门源 =====
-RSS_URL = "https://news.aolifu.org/c/hottest"
+# ===== 使用 RSSHub 提供的凤凰网新闻源 =====
+RSS_URL = "https://rsshub.app/ifeng/news"
 
-# 可选：如果你以后需要切换其他源，直接改上面这一行即可
-# 例如：RSS_URL = "https://hot.uihash.com"
-# 或者：RSS_URL = "https://rsshub.app/news/all"
+# ===== 其他可选新闻源 =====
+# RSSHub 聚合新闻路由：https://rsshub.app/news/all
+# 新浪新闻路由：https://rsshub.app/sina/news
+# 网易新闻路由：https://rsshub.app/163/news
+# 联合早报新闻路由：https://rsshub.app/zaobao/znews
 
 PUSHPLUS_API_URL = "http://www.pushplus.plus/send"
 NEWS_COUNT = 10   # 获取新闻条数
 
 pp_token = os.getenv('PPTOKEN')
 
-print("=== 开始抓取聚合热门新闻 (news.aolifu.org) ===")
+print("=== 开始抓取 RSSHub 聚合新闻 (凤凰网) ===")
 if not pp_token:
     print("❌ 错误：未获取到 PPTOKEN")
     sys.exit(1)
 
-# 故障排查：禁用SSL证书验证（解决某些站点的证书问题）
+# 故障排查&防屏蔽
 if hasattr(ssl, '_create_unverified_context'):
     ssl._create_default_https_context = ssl._create_unverified_context
 
 def clean_html(raw_html):
-    """移除HTML标签，提取纯文本"""
     import re
     clean = re.compile(r'<[^>]+>').sub('', raw_html)
     clean = re.sub(r'\s+', ' ', clean).strip()
@@ -42,8 +43,14 @@ def clean_html(raw_html):
 
 def get_rss_news(limit=10):
     try:
-        # 故障排查：模拟浏览器 User-Agent，防止被屏蔽
+        print(f"正在请求: {RSS_URL}")
         feed = feedparser.parse(RSS_URL, agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        print(f"feed 状态: {getattr(feed, 'status', 'N/A')}")
+        print(f"feed 版本: {feed.version if hasattr(feed, 'version') else 'N/A'}")
+        print(f"条目数量: {len(feed.entries)}")
+        if hasattr(feed, 'bozo') and feed.bozo:
+            print(f"解析异常: {feed.bozo_exception}")
+            return []
         
         if not feed.entries:
             print("❌ RSS 订阅中没有条目")
@@ -52,7 +59,6 @@ def get_rss_news(limit=10):
         news_list = []
         for i, entry in enumerate(feed.entries[:limit], 1):
             title = entry.title
-            # 获取摘要
             summary = entry.get('summary', '')
             if not summary:
                 summary = entry.get('description', '暂无简介')
@@ -78,7 +84,6 @@ def format_news_message(news_list):
     return "\n".join(lines).strip()
 
 def send_to_wechat(title, content):
-    # 微信单条消息字符限制，预留空间
     if len(content) > 1900:
         content = content[:1900] + "…\n(内容过长，已截断)"
     print(f"准备发送消息：{title}")
