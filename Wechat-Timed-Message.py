@@ -1,154 +1,50 @@
-#!/usr/bin/env python
-# -*-coding:utf-8-*-
-# by 'hollowman6' from Lanzhou University(兰州大学)
-
 import os
-import json
+import re
 import requests
-import urllib.parse
+from datetime import datetime
 
-sckey = os.environ['SERVERCHANSCKEY']
-pptoken = os.environ['PPTOKEN']
-pptopic = os.environ['PPTOPIC']
-title = os.environ['TITLE']
-message = os.environ['MSG']
-content = os.environ['CONTENT']
-image = os.environ['IMAGE']
-corpid = os.environ['CORPID']
-corpsecret = os.environ['CORPSECRET']
-agentid = os.environ['AGENTID']
-access_token = ""
-errorNotify = ""
+# 从环境变量中读取我们在 Secrets 里设置的网址
+url = os.getenv('URL')
 
-if not title:
-    raise Exception("未设置 `TITLE[name]` Actions Secret!")
-
-def exwechat_get_access_token():
-    url = 'https://qyapi.weixin.qq.com/cgi-bin/gettoken'
-    params = {
-        'corpid': corpid,
-        'corpsecret': corpsecret
-    }
-    resp = requests.get(url, params=params)
-    resp.raise_for_status()
-    resp_json = resp.json()
-    if 'access_token' in resp_json.keys():
-        return resp_json['access_token']
-    else:
-        raise Exception('请检查CORPID和CORPSECRET是否正确！\n' + resp.text)
-
-def exwechat_get_ShortTimeMedia(img_url):
-    if img_url:
-        media_url = f'https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token={access_token}&type=file'
-        f = requests.get(img_url).content
-        r = requests.post(media_url, files={'file': f}, json=True)
-        return r.json()['media_id']
-    else:
-        return ""
-
-
-def exwechat_send(title, digest, content):
-    url = 'https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=' + access_token
-    data = {
-        "touser": "@all",
-        "agentid": agentid,
-        "safe": 0,
-        "enable_id_trans": 0,
-        "enable_duplicate_check": 0,
-        "duplicate_check_interval": 1800
-    }
-    if content:
-        data["msgtype"] = 'mpnews'
-        data["mpnews"] = {
-            "articles": [
-                {
-                    "title": title,
-                    "thumb_media_id": exwechat_get_ShortTimeMedia(image),
-                    "author": "Hollow Man",
-                    "content_source_url": "https://github.com/HollowMan6/Wechat-Timed-Message/actions",
-                    "content": content,
-                    "digest": digest
-                }
-            ]
+def get_people_daily_headline():
+    try:
+        # 模拟浏览器访问，防止被拦截
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
-    else:
-        data["msgtype"] = "textcard"
-        data["textcard"] = {
-            "title": title,
-            "description": digest,
-            "url": "https://github.com/HollowMan6/Wechat-Timed-Message/actions"}
-    resp = requests.post(url, data=json.dumps(data))
-    resp.raise_for_status()
-    return resp
-
-if sckey:
-    try:
-        host = "https://sctapi.ftqq.com/"
-        title = urllib.parse.quote_plus(title.replace('\n', '\n\n'))
-        message = urllib.parse.quote_plus(message.replace('\n', '\n\n'))
-        res = requests.get(host + sckey + ".send?title=" + title +
-                            "&desp=" + message)
-        result = json.loads(res.text)
-        if result['data']['errno'] == 0:
-            print("Server酱推送成功!")
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        resp.encoding = 'utf-8'
+        
+        # 在网页源码中抓取第一个 <a> 标签里的链接和文字
+        # 人民日报首页的第一个 <a> 通常就是头条新闻
+        match = re.search(r'<a[^>]*href="([^"]+)"[^>]*>([^<]+)</a>', resp.text)
+        if match:
+            link = match.group(1)
+            title = match.group(2).strip()
+            # 如果链接是相对路径（比如 /abc.html），补全成完整网址
+            if link.startswith('/'):
+                link = 'https://www.people.com.cn' + link
+            return title, link
         else:
-            errorNotify += "Server酱推送错误: " + result + "\n"
+            return None, None
     except Exception as e:
-        print(e)
-        errorNotify += "Server酱推送错误!\n"
-else:
-    print("未设置SERVERCHANSCKEY，尝试使用PushPlus...")
+        print(f"抓取失败: {e}")
+        return None, None
 
-title = os.environ['TITLE']
-message = os.environ['MSG']
-
-if pptoken:
-    try:
-        host = "http://www.pushplus.plus/"
-        user = ""
-        if not message:
-            message = title
-            title = ""
-        title = urllib.parse.quote_plus(title.replace('\n', '<br>'))
-        message = urllib.parse.quote_plus(message.replace('\n', '<br>'))
-        res = requests.get(host + "send?token=" + pptoken + "&title=" + title +
-                            "&content=" + message + "&template=html&topic=" + pptopic)
-        result = res.json()
-        if result['code'] == 200:
-            print("成功通过PushPlus将结果通知给相关用户!")
-        else:
-            errorNotify += "PushPlus推送错误: " + result + "\n"
-    except Exception as e:
-        print(e)
-        errorNotify += "PushPlus推送错误!\n"
-else:
-    print("未设置PPTOKEN！")
-
-title = os.environ['TITLE']
-message = os.environ['MSG']
-
-if corpid:
-    info = ""
-    if corpsecret:
-        if agentid:
-            try:
-                access_token = exwechat_get_access_token()
-                content = content.replace('\n', '<br>')
-                res = exwechat_send(title, message, content)
-                result = res.json()
-                if result['errcode'] == 0:
-                    print("成功通过企业微信将结果通知给用户!")
-                else:
-                    errorNotify += "企业微信推送错误: " + res.text + "\n"
-            except Exception as e:
-                print(e)
-                errorNotify += "企业微信推送错误!\n"
-        else:
-            print("未设置AGENTID，无法推送到企业微信！")
+def main():
+    title, link = get_people_daily_headline()
+    
+    if title and link:
+        msg_title = "📰 人民日报今日头条"
+        msg_content = f"{title}\n{link}"
     else:
-        print("未设置CORPSECRET，无法推送到企业微信！")
-else:
-    print("未设置CORPID！")
+        msg_title = "⚠️ 抓取失败"
+        msg_content = "未能获取人民日报头条，请检查网址或网络。"
+    
+    # 把消息标题和内容存到环境变量，供后面的推送脚本使用
+    os.environ['TITLE'] = msg_title
+    os.environ['MSG'] = msg_content
 
-if errorNotify:
-    raise Exception(errorNotify)
+if __name__ == "__main__":
+    main()
