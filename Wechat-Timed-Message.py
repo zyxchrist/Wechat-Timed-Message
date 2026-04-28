@@ -11,29 +11,30 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "feedparser"])
     import feedparser
 
-# 配置
-RSS_URL = "http://www.people.com.cn/rss/politics.xml"
+# ===== 只需要修改这一行 RSS_URL =====
+# 凤凰网 RSS 地址（综合新闻，包含国内、国际、社会等）
+RSS_URL = "http://news.ifeng.com/rss/"
+# 如果你更想要“大陆新闻”专题，可以用下面这行（注释掉上面，取消下面注释）：
+# RSS_URL = "http://news.ifeng.com/rss/mainland.xml"
+# ====================================
+
 PUSHPLUS_API_URL = "http://www.pushplus.plus/send"
-NEWS_COUNT = 10  # 你想要获取的条数（可改为5、8、10等）
+NEWS_COUNT = 10  # 获取条数，可自己改
 
 pp_token = os.getenv('PPTOKEN')
 
-print("=== 开始抓取人民日报 RSS 多条新闻（含简介）===")
+print("=== 开始抓取凤凰网 RSS 新闻 ===")
 if not pp_token:
     print("❌ 错误：未获取到 PPTOKEN")
     sys.exit(1)
 
 def clean_html(raw_html):
-    """去除字符串中的HTML标签，提取纯文本"""
     import re
-    # 移除 <...> 标签
     clean = re.compile(r'<[^>]+>').sub('', raw_html)
-    # 移除多余空白字符
     clean = re.sub(r'\s+', ' ', clean).strip()
     return clean
 
 def get_rss_news(limit=10):
-    """获取前 limit 条新闻，返回列表 [(标题, 简介), ...]"""
     try:
         feed = feedparser.parse(RSS_URL)
         if not feed.entries:
@@ -43,13 +44,11 @@ def get_rss_news(limit=10):
         news_list = []
         for i, entry in enumerate(feed.entries[:limit], 1):
             title = entry.title
-            # 获取摘要，如果不存在则使用描述，最后用空字符串
+            # 获取摘要，凤凰网的 RSS 通常有 summary 或 description
             summary = entry.get('summary', '')
             if not summary:
                 summary = entry.get('description', '暂无简介')
-            # 去除HTML标签，保留纯文本
             summary_clean = clean_html(summary)
-            # 限制摘要长度（可选，微信消息有2000字符限制，10条摘要不会超）
             if len(summary_clean) > 150:
                 summary_clean = summary_clean[:150] + '…'
             news_list.append((title, summary_clean))
@@ -61,15 +60,13 @@ def get_rss_news(limit=10):
         return []
 
 def format_news_message(news_list):
-    """格式化成消息文本：标题 + 简介（无链接）"""
     if not news_list:
         return "今日未获取到新闻。"
-    
     lines = []
     for i, (title, summary) in enumerate(news_list, 1):
         lines.append(f"{i}. {title}")
         lines.append(f"   {summary}")
-        lines.append("")  # 空行分隔
+        lines.append("")
     return "\n".join(lines).strip()
 
 def send_to_wechat(title, content):
@@ -90,6 +87,6 @@ if __name__ == "__main__":
     news = get_rss_news(NEWS_COUNT)
     if news:
         content = format_news_message(news)
-        send_to_wechat(f"📰 人民日报今日头条（共{NEWS_COUNT}条）", content)
+        send_to_wechat(f"📰 凤凰网今日要闻（共{NEWS_COUNT}条）", content)
     else:
-        send_to_wechat("⚠️ 抓取失败", "未能获取新闻，请检查RSS")
+        send_to_wechat("⚠️ 抓取失败", "未能从凤凰网 RSS 获取新闻，请检查地址")
