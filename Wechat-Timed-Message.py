@@ -11,16 +11,13 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "feedparser"])
     import feedparser
 
-# ===== 只需要修改这一行 RSS_URL =====
-# 凤凰网 RSS 地址（综合新闻，包含国内、国际、社会等）
-RSS_URL = "http://news.ifeng.com/rss/"
-# 如果你更想要“大陆新闻”专题，可以用下面这行（注释掉上面，取消下面注释）：
-# RSS_URL = "http://news.ifeng.com/rss/mainland.xml"
-# ====================================
+# ===== 使用有效的凤凰网新闻RSS源 =====
+# 下面的链接是站长之家第三方整理的凤凰网新闻聚合源
+RSS_URL = "http://www.hifiwiki.net/news/rss/ifeng_news.xml" # 凤凰网综合新闻
+# RSS_URL = "http://www.hifiwiki.net/news/rss/ifeng_blog.xml" # 凤凰网博报频道
 
 PUSHPLUS_API_URL = "http://www.pushplus.plus/send"
-NEWS_COUNT = 10  # 获取条数，可自己改
-
+NEWS_COUNT = 10    # 显示新闻条数（不可超过20，防止超限）
 pp_token = os.getenv('PPTOKEN')
 
 print("=== 开始抓取凤凰网 RSS 新闻 ===")
@@ -30,7 +27,9 @@ if not pp_token:
 
 def clean_html(raw_html):
     import re
+    # 移除所有HTML/XML标签
     clean = re.compile(r'<[^>]+>').sub('', raw_html)
+    # 将多个空白字符转为单个空格
     clean = re.sub(r'\s+', ' ', clean).strip()
     return clean
 
@@ -44,13 +43,14 @@ def get_rss_news(limit=10):
         news_list = []
         for i, entry in enumerate(feed.entries[:limit], 1):
             title = entry.title
-            # 获取摘要，凤凰网的 RSS 通常有 summary 或 description
+            # 获取摘要，优先使用summary字段，其次是description
             summary = entry.get('summary', '')
             if not summary:
                 summary = entry.get('description', '暂无简介')
             summary_clean = clean_html(summary)
-            if len(summary_clean) > 150:
-                summary_clean = summary_clean[:150] + '…'
+            # 限制摘要长度，防止消息过长
+            if len(summary_clean) > 200:
+                summary_clean = summary_clean[:200] + '…'
             news_list.append((title, summary_clean))
             print(f"  第{i}条: {title[:30]}...")
         print(f"✅ 成功获取 {len(news_list)} 条新闻")
@@ -70,6 +70,9 @@ def format_news_message(news_list):
     return "\n".join(lines).strip()
 
 def send_to_wechat(title, content):
+    # 检查内容长度，微信消息有字符限制，防止推送失败
+    if len(content) > 1900:
+        content = content[:1900] + "…\n(内容过长，已截断)"
     print(f"准备发送消息：{title}")
     payload = {"token": pp_token, "title": title, "content": content}
     try:
