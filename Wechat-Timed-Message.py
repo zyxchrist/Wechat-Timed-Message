@@ -13,7 +13,7 @@ except ImportError:
     import feedparser
 
 # ===== 使用 RSSHub 提供的凤凰网新闻源 =====
-RSS_URL = "https://rsshub.app/ifeng/news"
+RSS_URL = "https://rsshub.rssforever.com/ifeng/news"
 
 # ===== 其他可选新闻源 =====
 # RSSHub 聚合新闻路由：https://rsshub.app/news/all
